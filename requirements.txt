@@ -1,0 +1,12 @@
+streamlit
+pandas
+openai
+python-dotenv
+openpyxl
+tabulate
+plotly
+xlsxwriter
+kaleido
+reportlab
+fpdf
+matplotlib
