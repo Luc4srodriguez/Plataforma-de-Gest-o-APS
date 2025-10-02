@@ -1,20 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Dashboard Avançado para Análise de Dados da Atenção Primária à Saúde (APS) - v6.2
-
-Este script utiliza Streamlit para criar uma interface interativa e rica em
-funcionalidades para gestores da APS.
-
-LOG DE ALTERAÇÕES (v6.2 - Análise Estratégica ESB):
-- REFORMULAÇÃO DA ABA 'TIPOS DE CONSULTAS ESB': A aba foi reconstruída com foco
-  em insights gerenciais, analisando a performance das unidades em 'Captação de
-  Novos Pacientes' vs. 'Continuidade do Cuidado'.
-- NOVOS KPIs E GRÁFICOS ESTRATÉGICOS: Adicionados KPIs de performance, um gráfico
-  de rosca para o perfil geral do cuidado e gráficos de ranking para destacar
-  as unidades com melhor desempenho em cada área.
-- ANÁLISE GUIADA POR ABAS: A navegação foi reestruturada em abas que respondem
-  a perguntas-chave de um gestor de saúde bucal.
-"""
 
 import io
 import os
@@ -106,6 +89,7 @@ def carregar_parametros() -> pd.DataFrame:
         'ITATUBA-PB':             {'parametro_esf': 2000, 'limite_esf': 3000},
         'MOGEIRO-PB':             {'parametro_esf': 2000, 'limite_esf': 3000},
         'PATU-RN':                {'parametro_esf': 2000, 'limite_esf': 3000},
+        'PITIMBU-PB':             {'parametro_esf': 2000, 'limite_esf': 3000},
         'PAULA CÂNDIDO-MG':       {'parametro_esf': 2000, 'limite_esf': 3000},
         'PEDRO VELHO-RN':         {'parametro_esf': 2000, 'limite_esf': 3000},
         'PENDÊNCIAS-RN':          {'parametro_esf': 2000, 'limite_esf': 3000},
@@ -415,27 +399,41 @@ class DashboardAPS:
                 st.error("Nenhuma planilha válida foi reconhecida. Verifique o formato e as colunas dos arquivos.")
                 return
 
+            # 🔹 Identificação automática do município pelo nome do arquivo
             municipios = sorted(self.df_parametros['MUNICIPIO'].unique())
             map_norm = {_normalize_text(m): m for m in municipios}
-            
-            municipio_inferido = next((map_norm[token] for f in files if (token := _normalize_text(os.path.basename(f.name).split('_')[0])) in map_norm), None)
+
+            municipio_inferido = None
+            for f in files:
+                nome_arquivo = _normalize_text(os.path.basename(f.name))
+                for key, original in map_norm.items():
+                    if key in nome_arquivo:   # procura o nome completo dentro do nome do arquivo
+                        municipio_inferido = original
+                        break
+                if municipio_inferido:
+                    break
+
             self.municipio_selecionado = municipio_inferido or municipios[0]
+
+            # Guarda nos parâmetros da sessão (URL-friendly)
             st.query_params["municipio"] = self.municipio_selecionado
-            
+
+            # Carrega parâmetros do município escolhido
             pars = self.df_parametros.query("MUNICIPIO == @self.municipio_selecionado").iloc[0]
             self.parametros_municipio_atual = pars.to_dict()
             self.parametro_oficial, self.limite_oficial = pars['PARAMETRO_ESF'], pars['LIMITE_ESF']
-            
-            st.markdown(f"**Município:** `{self.municipio_selecionado}`")
+
+            # Exibe município detectado
+            st.markdown(f"**Município detectado automaticamente:** `{self.municipio_selecionado}`")
             st.info(f"Parâmetro Padrão ESF: {self.parametro_oficial} | Limite Padrão ESF: {self.limite_oficial}")
             st.markdown("---")
-            
+
             filter_col1, filter_col2 = st.columns(2)
             with filter_col1:
                 if self.df_cid_bruto is not None:
                     unidades = ['Todas'] + sorted(self.df_cid_bruto[COL_UNIDADE].unique())
                     self.unidade_selecionada = st.selectbox("2. Filtrar por Unidade", unidades)
-            
+
             with filter_col2:
                 if self.df_prod_bruto is not None and 'DATA' in self.df_prod_bruto.columns:
                     df_data = self.df_prod_bruto.dropna(subset=['DATA'])
@@ -876,12 +874,18 @@ class DashboardAPS:
             self._render_login_page()
         else:
             st.markdown("<style> section[data-testid='stSidebar'] {display: none;} </style>", unsafe_allow_html=True)
-            
-            st.title(f"Gestão APS | {self.municipio_selecionado or 'Sem município'}")
-            
+
+            # 🔹 Primeiro renderiza os controles para detectar município
             self.render_controls()
-            
-            has_data = self.df_cid_bruto is not None or self.df_dom_bruto is not None or self.df_prod_bruto is not None
+
+            # 🔹 Agora sim mostra o título com município já definido
+            st.title(f"Gestão APS | {self.municipio_selecionado or 'Sem município'}")
+
+            has_data = (
+                self.df_cid_bruto is not None 
+                or self.df_dom_bruto is not None 
+                or self.df_prod_bruto is not None
+            )
             if has_data:
                 self._preparar_dados_para_analise()
                 self.render_dashboard_content()
